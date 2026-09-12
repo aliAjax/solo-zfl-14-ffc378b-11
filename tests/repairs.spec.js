@@ -6,7 +6,7 @@ const STORAGE_KEY = "zfl-14-repairs";
 test.beforeEach(async ({ page }) => {
   await page.goto("/");
   await page.evaluate((key) => {
-    localStorage.setItem(key, JSON.stringify({ filter: "all", tagFilter: "all", repairs: [] }));
+    localStorage.setItem(key, JSON.stringify({ version: 2, filter: "all", tagFilter: "", repairs: [] }));
   }, STORAGE_KEY);
   await page.reload();
 });
@@ -41,8 +41,50 @@ test("按标签筛选列表，可切回查看全部", async ({ page }) => {
   await expect(page.locator(".repair")).toContainText("衣柜门合页松动");
   await expect(page.locator('[data-tag-filter="家具"]')).toHaveClass(/active/);
 
-  await page.locator('[data-tag-filter="all"]').click();
+  await page.getByRole("button", { name: "全部标签" }).click();
   await expect(page.locator(".repair")).toHaveCount(2);
+});
+
+test("标签名为 all 时可单独筛选，全部标签按钮仍能切回全部", async ({ page }) => {
+  await addRepair(page, { location: "储物间", title: "货架螺丝松动", tags: "all" });
+  await addRepair(page, { location: "厨房", title: "水龙头滴水", tags: "水电" });
+
+  // 点击 all 标签按钮，只看带 all 标签的事项
+  await page.getByRole("button", { name: "all", exact: true }).click();
+  await expect(page.locator(".repair")).toHaveCount(1);
+  await expect(page.locator(".repair")).toContainText("货架螺丝松动");
+
+  // 刷新后 all 标签筛选仍保持
+  await page.reload();
+  await expect(page.locator(".repair")).toHaveCount(1);
+  await expect(page.getByRole("button", { name: "all", exact: true })).toHaveClass(/active/);
+
+  // 全部标签按钮切回全部
+  await page.getByRole("button", { name: "全部标签" }).click();
+  await expect(page.locator(".repair")).toHaveCount(2);
+});
+
+test("旧版本存储中的 tagFilter all 迁移为查看全部", async ({ page }) => {
+  await page.evaluate((key) => {
+    localStorage.setItem(key, JSON.stringify({
+      filter: "all",
+      tagFilter: "all",
+      repairs: [
+        { id: "legacy-1", location: "车库", title: "卷帘门遥控器失灵", tags: ["all"], priority: "low", cost: 0, status: "todo", photo: "", note: "" },
+        { id: "legacy-2", location: "书房", title: "台灯闪烁", tags: ["电路"], priority: "medium", cost: 0, status: "todo", photo: "", note: "" }
+      ]
+    }));
+  }, STORAGE_KEY);
+  await page.reload();
+
+  // 旧版 all 是「全部标签」哨兵值，迁移后应显示全部事项
+  await expect(page.locator(".repair")).toHaveCount(2);
+  await expect(page.getByRole("button", { name: "全部标签" })).toHaveClass(/active/);
+
+  // all 标签本身仍可单独筛选
+  await page.getByRole("button", { name: "all", exact: true }).click();
+  await expect(page.locator(".repair")).toHaveCount(1);
+  await expect(page.locator(".repair")).toContainText("卷帘门遥控器失灵");
 });
 
 test("空标签事项正常保存，不产生标签和空筛选项", async ({ page }) => {

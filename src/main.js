@@ -1,6 +1,8 @@
 import "./styles.css";
 
 const STORAGE_KEY = "zfl-14-repairs";
+// v2：「全部标签」筛选的哨兵值由 "all" 改为空字符串，避免与名为 all 的标签冲突
+const STATE_VERSION = 2;
 const statuses = {
   all: "全部",
   todo: "待处理",
@@ -21,9 +23,12 @@ function loadState() {
   const saved = localStorage.getItem(STORAGE_KEY);
   if (saved) {
     const data = JSON.parse(saved);
+    // v1 中 "all" 表示「全部标签」，迁移为空字符串；v2 起 "all" 只是普通标签值
+    const tagFilter = data.version === STATE_VERSION ? data.tagFilter : (data.tagFilter === "all" ? "" : data.tagFilter);
     return {
+      version: STATE_VERSION,
       filter: data.filter || "all",
-      tagFilter: data.tagFilter || "all",
+      tagFilter: typeof tagFilter === "string" ? tagFilter : "",
       repairs: (data.repairs || []).map((repair) => ({
         ...repair,
         tags: Array.isArray(repair.tags) ? repair.tags : []
@@ -31,8 +36,9 @@ function loadState() {
     };
   }
   return {
+    version: STATE_VERSION,
     filter: "all",
-    tagFilter: "all",
+    tagFilter: "",
     repairs: [
       {
         id: crypto.randomUUID(),
@@ -55,8 +61,8 @@ function saveState() {
 
 function render() {
   const tags = collectTags();
-  if (state.tagFilter !== "all" && !tags.includes(state.tagFilter)) {
-    state.tagFilter = "all";
+  if (state.tagFilter !== "" && !tags.includes(state.tagFilter)) {
+    state.tagFilter = "";
     saveState();
   }
   const repairs = filteredRepairs();
@@ -100,7 +106,7 @@ function render() {
           </div>
           ${tags.length ? `
           <div class="toolbar tagbar">
-            <button class="seg tag ${state.tagFilter === "all" ? "active" : ""}" data-tag-filter="all">全部标签</button>
+            <button class="seg tag ${state.tagFilter === "" ? "active" : ""}" data-tag-filter="">全部标签</button>
             ${tags.map((tag) => `<button class="seg tag ${state.tagFilter === tag ? "active" : ""}" data-tag-filter="${escapeHtml(tag)}">${escapeHtml(tag)}</button>`).join("")}
           </div>
           ` : ""}
@@ -209,7 +215,7 @@ function bindEvents() {
 function filteredRepairs() {
   return state.repairs.filter((repair) => {
     const statusMatch = state.filter === "all" || repair.status === state.filter;
-    const tagMatch = state.tagFilter === "all" || repair.tags.includes(state.tagFilter);
+    const tagMatch = state.tagFilter === "" || repair.tags.includes(state.tagFilter);
     return statusMatch && tagMatch;
   });
 }
