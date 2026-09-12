@@ -164,6 +164,11 @@ textarea {
   color: white;
 }
 
+.seg.tag.active {
+  background: #526d4e;
+  color: white;
+}
+
 .repairs {
   display: grid;
   gap: 12px;
@@ -217,6 +222,7 @@ textarea {
 }
 
 .chip,
+.tag-chip,
 .priority,
 .status {
   border-radius: 999px;
@@ -228,6 +234,11 @@ textarea {
 .chip {
   background: #eef1eb;
   color: #596257;
+}
+
+.tag-chip {
+  background: #dde8f2;
+  color: #315674;
 }
 
 .priority.high {

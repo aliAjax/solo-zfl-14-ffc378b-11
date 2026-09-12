@@ -19,14 +19,26 @@ const app = document.querySelector("#app");
 
 function loadState() {
   const saved = localStorage.getItem(STORAGE_KEY);
-  if (saved) return JSON.parse(saved);
+  if (saved) {
+    const data = JSON.parse(saved);
+    return {
+      filter: data.filter || "all",
+      tagFilter: data.tagFilter || "all",
+      repairs: (data.repairs || []).map((repair) => ({
+        ...repair,
+        tags: Array.isArray(repair.tags) ? repair.tags : []
+      }))
+    };
+  }
   return {
     filter: "all",
+    tagFilter: "all",
     repairs: [
       {
         id: crypto.randomUUID(),
         location: "厨房",
         title: "水槽下方渗水",
+        tags: ["水电", "急修"],
         priority: "high",
         cost: 260,
         status: "todo",
@@ -42,6 +54,11 @@ function saveState() {
 }
 
 function render() {
+  const tags = collectTags();
+  if (state.tagFilter !== "all" && !tags.includes(state.tagFilter)) {
+    state.tagFilter = "all";
+    saveState();
+  }
   const repairs = filteredRepairs();
   const unfinished = state.repairs.filter((repair) => repair.status !== "done");
   const totalCost = unfinished.reduce((total, repair) => total + Number(repair.cost || 0), 0);
@@ -67,6 +84,7 @@ function render() {
           <form class="form" id="repair-form">
             <label>位置<input name="location" required placeholder="例如卫生间"></label>
             <label>问题描述<textarea name="title" required placeholder="例如门锁松动"></textarea></label>
+            <label>标签<input name="tags" placeholder="可选，多个标签用逗号分隔，例如 水电, 急修"></label>
             <label>优先级<select name="priority">${renderPriorityOptions("medium")}</select></label>
             <label>预计费用<input name="cost" type="number" min="0" step="1" value="0"></label>
             <label>处理状态<select name="status">${renderStatusOptions("todo")}</select></label>
@@ -80,8 +98,14 @@ function render() {
           <div class="toolbar">
             ${Object.entries(statuses).map(([value, label]) => `<button class="seg ${state.filter === value ? "active" : ""}" data-filter="${value}">${label}</button>`).join("")}
           </div>
+          ${tags.length ? `
+          <div class="toolbar tagbar">
+            <button class="seg tag ${state.tagFilter === "all" ? "active" : ""}" data-tag-filter="all">全部标签</button>
+            ${tags.map((tag) => `<button class="seg tag ${state.tagFilter === tag ? "active" : ""}" data-tag-filter="${escapeHtml(tag)}">${escapeHtml(tag)}</button>`).join("")}
+          </div>
+          ` : ""}
           <div class="repairs">
-            ${repairs.length ? repairs.map(renderRepair).join("") : `<div class="empty">当前状态下没有维修事项</div>`}
+            ${repairs.length ? repairs.map(renderRepair).join("") : `<div class="empty">当前筛选条件下没有维修事项</div>`}
           </div>
         </section>
       </section>
@@ -102,6 +126,7 @@ function renderRepair(repair) {
           <span class="status ${repair.status}">${statuses[repair.status]}</span>
         </div>
         <p>${escapeHtml(repair.title)}</p>
+        ${repair.tags.length ? `<div class="row">${repair.tags.map((tag) => `<span class="tag-chip">${escapeHtml(tag)}</span>`).join("")}</div>` : ""}
         <div class="row">
           <span class="chip">预计 ¥${Number(repair.cost || 0)}</span>
           <span class="chip">${escapeHtml(repair.note || "暂无备注")}</span>
@@ -136,6 +161,7 @@ function bindEvents() {
       id: crypto.randomUUID(),
       location: data.location.trim(),
       title: data.title.trim(),
+      tags: parseTags(data.tags),
       priority: data.priority,
       cost: Number(data.cost || 0),
       status: data.status,
@@ -149,6 +175,14 @@ function bindEvents() {
   document.querySelectorAll("[data-filter]").forEach((button) => {
     button.addEventListener("click", () => {
       state.filter = button.dataset.filter;
+      saveState();
+      render();
+    });
+  });
+
+  document.querySelectorAll("[data-tag-filter]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.tagFilter = button.dataset.tagFilter;
       saveState();
       render();
     });
@@ -173,8 +207,19 @@ function bindEvents() {
 }
 
 function filteredRepairs() {
-  if (state.filter === "all") return state.repairs;
-  return state.repairs.filter((repair) => repair.status === state.filter);
+  return state.repairs.filter((repair) => {
+    const statusMatch = state.filter === "all" || repair.status === state.filter;
+    const tagMatch = state.tagFilter === "all" || repair.tags.includes(state.tagFilter);
+    return statusMatch && tagMatch;
+  });
+}
+
+function collectTags() {
+  return [...new Set(state.repairs.flatMap((repair) => repair.tags))];
+}
+
+function parseTags(value) {
+  return [...new Set(String(value || "").split(/[,，]/).map((tag) => tag.trim()).filter(Boolean))];
 }
 
 function escapeHtml(value) {
